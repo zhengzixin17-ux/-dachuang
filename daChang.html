@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>OpenClaw 智能前端 · 多模态交互壳</title>
+    <!-- Tesseract.js OCR 引擎 (纯前端) -->
+    <script src="https://unpkg.com/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+    <!-- 优雅图标库 (Font Awesome) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(145deg, #f5f7fc 0%, #eef2f8 100%);
+            min-height: 100vh;
+            padding: 2rem 1.5rem;
+        }
+
+        /* 主容器 */
+        .app-container {
+            max-width: 1280px;
+            margin: 0 auto;
+        }
+
+        /* 头部 */
+        .header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        .header h1 {
+            font-size: 2.4rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #1a2a3f, #0f2b3d);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            letter-spacing: -0.3px;
+        }
+
+        .header p {
+            color: #4a627a;
+            margin-top: 0.5rem;
+            font-weight: 500;
+        }
+
+        .badge {
+            background: #e9edf2;
+            display: inline-block;
+            padding: 0.2rem 1rem;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            color: #2c4c6e;
+            margin-top: 0.8rem;
+        }
+
+        /* 双栏布局 (左: 输入区 / 右: 对话区) */
+        .dashboard {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.8rem;
+        }
+
+        .input-panel {
+            flex: 1.2;
+            min-width: 280px;
+            background: rgba(255,255,255,0.75);
+            backdrop-filter: blur(2px);
+            border-radius: 2rem;
+            padding: 1.5rem;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.05);
+            border: 1px solid rgba(255,255,255,0.6);
+        }
+
+        .output-panel {
+            flex: 1;
+            min-width: 280px;
+            background: white;
+            border-radius: 2rem;
+            padding: 1.5rem;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #eef2f6;
+        }
+
+        /* 通用卡片模块 */
+        .module-card {
+            background: white;
+            border-radius: 1.5rem;
+            padding: 1.2rem;
+            margin-bottom: 1.8rem;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.03);
+            border: 1px solid #eef2f8;
+            transition: all 0.2s;
+        }
+
+        .module-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #1e2f3f;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-left: 4px solid #3b82f6;
+            padding-left: 0.8rem;
+        }
+
+        .module-title i {
+            color: #3b82f6;
+            font-size: 1.2rem;
+        }
+
+        /* 图片上传区域 */
+        .upload-area {
+            border: 2px dashed #cbd5e1;
+            border-radius: 1.2rem;
+            padding: 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fafcff;
+        }
+        .upload-area:hover {
+            border-color: #3b82f6;
+            background: #f0f7ff;
+        }
+        .upload-area i {
+            font-size: 2rem;
+            color: #6c8db0;
+            margin-bottom: 0.4rem;
+        }
+        .image-preview {
+            margin-top: 0.8rem;
+            max-width: 100%;
+            border-radius: 1rem;
+            display: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .ocr-progress {
+            font-size: 0.75rem;
+            color: #3b82f6;
+            margin-top: 0.5rem;
+            font-weight: 500;
+        }
+
+        /* 语音按钮 */
+        .voice-btn {
+            background: linear-gradient(120deg, #1e293b, #0f172a);
+            color: white;
+            border: none;
+            padding: 0.7rem 1.2rem;
+            border-radius: 3rem;
+            font-weight: 500;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        .voice-btn:hover {
+            background: linear-gradient(120deg, #0f172a, #020617);
+            transform: scale(0.98);
+        }
+        .voice-status {
+            font-size: 0.75rem;
+            color: #3b82f6;
+            margin-top: 0.4rem;
+            text-align: center;
+        }
+
+        /* 文本输入框 */
+        .text-input-area {
+            margin: 0.5rem 0 1rem;
+        }
+        .message-input {
+            width: 100%;
+            border: 1px solid #e2e8f0;
+            border-radius: 1.5rem;
+            padding: 1rem 1.2rem;
+            font-size: 0.95rem;
+            resize: vertical;
+            background: #ffffff;
+            transition: 0.2s;
+            font-family: inherit;
+        }
+        .message-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
+        }
+
+        .send-btn {
+            background: #3b82f6;
+            border: none;
+            color: white;
+            padding: 0.8rem 1rem;
+            border-radius: 2rem;
+            font-weight: 600;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 1rem;
+            margin-top: 0.6rem;
+        }
+        .send-btn:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+        .send-btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 结果展示区 */
+        .answer-box {
+            background: #f8fafc;
+            border-radius: 1.2rem;
+            padding: 1.2rem;
+            margin-top: 1rem;
+            flex-grow: 1;
+            overflow-y: auto;
+            min-height: 280px;
+            border: 1px solid #eef2f8;
+        }
+        .answer-header {
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+            color: #0f2b3d;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 0.5rem;
+        }
+        .answer-content {
+            white-space: pre-wrap;
+            line-height: 1.5;
+            color: #1e2a3a;
+            font-size: 0.95rem;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid #e2e8f0;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* API 配置区 */
+        .config-area {
+            margin-top: 1.5rem;
+            background: #f1f5f9;
+            border-radius: 1.2rem;
+            padding: 0.9rem;
+            font-size: 0.8rem;
+        }
+        .config-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .config-field {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        .config-field input {
+            flex: 1;
+            padding: 0.4rem 0.6rem;
+            border-radius: 1rem;
+            border: 1px solid #cbd5e1;
+            font-size: 0.75rem;
+            background: white;
+        }
+        .config-note {
+            font-size: 0.7rem;
+            color: #4b5563;
+            margin-top: 0.3rem;
+        }
+        button.small-btn {
+            background: #e2e8f0;
+            border: none;
+            padding: 0.3rem 0.8rem;
+            border-radius: 1rem;
+            font-size: 0.7rem;
+            cursor: pointer;
+        }
+
+        hr {
+            margin: 0.8rem 0;
+            border-color: #e2e8f0;
+        }
+
+        @media (max-width: 780px) {
+            body { padding: 1rem; }
+            .dashboard { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="header">
+        <h1>大创项目</h1>
+        <p>可用语音识别等</p>
+        <div class="badge"><i class="fas fa-microchip"></i> 可调用 OpenClaw API</div>
+    </div>
+
+    <div class="dashboard">
+        <!-- 左侧：输入面板 (图片/语音/文本) -->
+        <div class="input-panel">
+            <!-- 图片OCR模块 -->
+            <div class="module-card">
+                <div class="module-title"><i class="fas fa-image"></i> 图片输入</div>
+                <div class="upload-area" id="uploadArea">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <p style="font-size:0.85rem; margin-top: 4px;">点击或拖拽上传图片</p>
+                    <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                </div>
+                <img id="imagePreview" class="image-preview" alt="预览">
+                <div id="ocrProgress" class="ocr-progress"></div>
+                <div id="ocrResultHint" style="font-size:0.75rem; color:#4b5563; margin-top: 6px;"></div>
+            </div>
+
+            <!-- 语音识别模块 STT -->
+            <div class="module-card">
+                <div class="module-title"><i class="fas fa-microphone-alt"></i> 语音输入</div>
+                <button id="voiceStartBtn" class="voice-btn"><i class="fas fa-microphone"></i> 开始语音识别</button>
+                <div id="voiceStatus" class="voice-status">⚡ 点击按钮，允许麦克风后说话</div>
+            </div>
+
+            <!-- 文本编辑 & OpenClaw 发送区 -->
+            <div class="module-card" style="margin-bottom: 0;">
+                <div class="module-title"><i class="fas fa-comment-dots"></i> 待发送文本 (可编辑)</div>
+                <div class="text-input-area">
+                    <textarea id="userTextInput" rows="3" class="message-input" placeholder="OCR或语音识别结果会自动填入这里，您也可以直接输入文字..."></textarea>
+                </div>
+                <button id="sendToOpenClawBtn" class="send-btn"><i class="fas fa-paper-plane"></i> 发送给 OpenClaw → 获取答案</button>
+            </div>
+
+            <!-- OpenClaw API 配置区 (灵活对接) -->
+            <div class="config-area">
+                <div class="config-title"><i class="fas fa-plug"></i> OpenClaw API 配置</div>
+                <div class="config-field">
+                    <span style="white-space: nowrap;">端点 URL:</span>
+                    <input type="text" id="openclawUrl" placeholder="https://your-openclaw-api.com/chat" value="https://mock-openclaw.demo/api/chat">
+                </div>
+                <div class="config-field">
+                    <span>API Key (选填):</span>
+                    <input type="text" id="openclawApiKey" placeholder="Bearer token 或 key">
+                </div>
+                <div class="config-note">
+                    <i class="fas fa-info-circle"></i> 默认使用模拟演示端点 (展示调用流程)。<br>
+                    请替换为真实 OpenClaw 地址，支持 JSON: { "text": "内容" } → 期望返回 { "response": "答案" }。<br>
+                    可修改下方「请求/响应适配」模式 (默认适配多数场景)。
+                </div>
+                <div style="margin-top: 8px; display: flex; gap: 6px; justify-content: flex-end;">
+                    <button id="resetMockBtn" class="small-btn"><i class="fas fa-flask"></i> 重置演示Mock</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：OpenClaw 答案展示区 -->
+        <div class="output-panel">
+            <div class="answer-header">
+                <i class="fas fa-brain" style="color:#3b82f6"></i> OpenClaw 模型回答
+                <span style="font-size:0.7rem; background:#eef2ff; padding:2px 8px; border-radius:20px; margin-left:8px;">实时响应</span>
+            </div>
+            <div id="answerDisplay" class="answer-box">
+                <div class="answer-content" style="color:#6c8db0;">
+                    <i class="fas fa-comment"></i> 等待发送文本至 OpenClaw...
+                </div>
+            </div>
+            <div style="margin-top: 1rem; font-size: 0.7rem; text-align: center; color:#6c8db0;">
+                <i class="fas fa-arrow-right"></i> 流程：图片OCR/语音→文字 → OpenClaw → 答案展示
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ---------- 全局变量 ----------
+    let tesseractWorker = null;          // Tesseract worker 复用
+    let isRecognizing = false;           // 语音状态
+    let recognition = null;              // Web Speech API 实例
+
+    // DOM 元素
+    const imageInput = document.getElementById('imageInput');
+    const uploadArea = document.getElementById('uploadArea');
+    const imagePreview = document.getElementById('imagePreview');
+    const ocrProgressDiv = document.getElementById('ocrProgress');
+    const ocrResultHint = document.getElementById('ocrResultHint');
+    const voiceBtn = document.getElementById('voiceStartBtn');
+    const voiceStatus = document.getElementById('voiceStatus');
+    const userTextInput = document.getElementById('userTextInput');
+    const sendBtn = document.getElementById('sendToOpenClawBtn');
+    const answerDisplayDiv = document.getElementById('answerDisplay');
+    const openclawUrlInput = document.getElementById('openclawUrl');
+    const openclawApiKeyInput = document.getElementById('openclawApiKey');
+    const resetMockBtn = document.getElementById('resetMockBtn');
+
+    // ---------- 辅助函数 ----------
+    function showAnswer(text, isError = false) {
+        answerDisplayDiv.innerHTML = `
+            <div class="answer-content" style="${isError ? 'color:#b91c1c;' : 'color:#1e293b;'}">
+                ${isError ? '<i class="fas fa-exclamation-triangle"></i> ' : '<i class="fas fa-robot"></i> '}
+                ${escapeHtml(text)}
+            </div>
+        `;
+    }
+
+    function showLoadingAnswer() {
+        answerDisplayDiv.innerHTML = `
+            <div class="answer-content" style="display: flex; align-items: center; gap: 8px;">
+                <span class="loading-spinner"></span> OpenClaw 模型思考中...
+            </div>
+        `;
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function(c) {
+            return c;
+        });
+    }
+
+    // 更新文本域 (OCR / 语音结果填入)
+    function setMessageText(text) {
+        if (text && text.trim()) {
+            userTextInput.value = text.trim();
+            // 自动调整高度简单处理
+            userTextInput.style.height = 'auto';
+            userTextInput.style.height = Math.min(120, userTextInput.scrollHeight) + 'px';
+        }
+    }
+
+    // 获取当前消息内容
+    function getCurrentMessage() {
+        return userTextInput.value.trim();
+    }
+
+    // ---------- OCR 模块 (Tesseract.js 本地) ----------
+    async function initTesseract() {
+        if (!tesseractWorker) {
+            ocrProgressDiv.innerText = '⚙️ 初始化OCR引擎中...';
+            try {
+                // 创建 worker，使用英文（轻量）可支持中英混合可增加 chi_sim 但体积大，采用eng满足演示，需要中文可自行开启
+                tesseractWorker = await Tesseract.createWorker('eng', 1, {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            ocrProgressDiv.innerText = `📄 OCR 识别中: ${Math.round(m.progress * 100)}%`;
+                        }
+                    }
+                });
+                ocrProgressDiv.innerText = '✅ OCR引擎已就绪 (English)';
+                setTimeout(() => { if (ocrProgressDiv.innerText === '✅ OCR引擎已就绪 (English)') ocrProgressDiv.innerText = ''; }, 1500);
+            } catch(e) {
+                console.error(e);
+                ocrProgressDiv.innerText = '❌ OCR引擎加载失败，请刷新重试';
+            }
+        }
+        return tesseractWorker;
+    }
+
+    async function performOCR(file) {
+        if (!file) return;
+        // 预览图片
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            imagePreview.src = e.target.result;
+            imagePreview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+        
+        ocrProgressDiv.innerText = '🔍 准备OCR...';
+        ocrResultHint.innerText = '';
+        try {
+            const worker = await initTesseract();
+            if (!worker) throw new Error('OCR worker 未就绪');
+            ocrProgressDiv.innerText = '📖 图片识别中，请稍等...';
+            const { data: { text } } = await worker.recognize(file);
+            const recognizedText = text.trim();
+            if (recognizedText) {
+                ocrResultHint.innerText = `✅ 识别完成，已填入文本框`;
+                setMessageText(recognizedText);
+            } else {
+                ocrResultHint.innerText = `⚠️ 未识别到文字，请尝试更清晰的图片`;
+            }
+            ocrProgressDiv.innerText = '✅ OCR完成';
+            setTimeout(() => { if (ocrProgressDiv.innerText === '✅ OCR完成') ocrProgressDiv.innerText = ''; }, 2000);
+        } catch (err) {
+            console.error(err);
+            ocrProgressDiv.innerText = '❌ OCR失败，请重试';
+            ocrResultHint.innerText = '识别出错，可能图片格式不支持或引擎超时';
+        }
+    }
+
+    // 监听图片上传
+    uploadArea.addEventListener('click', () => imageInput.click());
+    imageInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+            performOCR(e.target.files[0]);
+        }
+    });
+    // 拖拽上传增强
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.style.borderColor = '#3b82f6'; });
+    uploadArea.addEventListener('dragleave', () => { uploadArea.style.borderColor = '#cbd5e1'; });
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.style.borderColor = '#cbd5e1';
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+            performOCR(file);
+        } else {
+            ocrResultHint.innerText = '请拖拽图片文件';
+        }
+    });
+
+    // ---------- 语音识别 STT (Web Speech API) ----------
+    function initSpeechRecognition() {
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            voiceStatus.innerText = '❌ 当前浏览器不支持语音识别，请使用 Chrome/Edge/Safari';
+            voiceBtn.disabled = true;
+            return null;
+        }
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recog = new SpeechRecognition();
+        recog.lang = 'zh-CN';        // 支持中文普通话，也可以识别部分英文
+        recog.interimResults = false; // 只返回最终结果
+        recog.maxAlternatives = 1;
+        return recog;
+    }
+
+    function startVoiceRecognition() {
+        if (isRecognizing) return;
+        if (!recognition) {
+            recognition = initSpeechRecognition();
+            if (!recognition) return;
+            // 绑定事件
+            recognition.onstart = () => {
+                isRecognizing = true;
+                voiceStatus.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> 聆听中... 请说话';
+                voiceBtn.style.opacity = '0.8';
+            };
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                if (transcript) {
+                    voiceStatus.innerHTML = `✅ 识别结果: "${transcript}" 已填入文本框`;
+                    setMessageText(transcript);
+                } else {
+                    voiceStatus.innerHTML = '⚠️ 未识别到语音，请重试';
+                }
+                isRecognizing = false;
+                voiceBtn.style.opacity = '1';
+                voiceBtn.disabled = false;
+            };
+            recognition.onerror = (event) => {
+                console.error(event);
+                voiceStatus.innerHTML = `🎤 识别错误: ${event.error}，请重试`;
+                isRecognizing = false;
+                voiceBtn.disabled = false;
+                voiceBtn.style.opacity = '1';
+            };
+            recognition.onend = () => {
+                if (isRecognizing) {
+                    voiceStatus.innerHTML = '🎤 语音识别结束';
+                    isRecognizing = false;
+                    voiceBtn.disabled = false;
+                    voiceBtn.style.opacity = '1';
+                }
+            };
+        }
+        try {
+            recognition.start();
+            voiceBtn.disabled = true;  // 防止重复点击
+        } catch(e) {
+            voiceStatus.innerHTML = '请先允许麦克风权限，或刷新后重试';
+            voiceBtn.disabled = false;
+        }
+    }
+
+    voiceBtn.addEventListener('click', startVoiceRecognition);
+
+    // ---------- OpenClaw API 调用 (灵活适配) ----------
+    // 默认请求适配器: 假设 OpenClaw 接收 { text: "用户输入" } 返回 { response: "答案" }
+    // 同时允许自定义通过修改下方函数 / 用户可配置不同格式，为了通用，支持简单模板
+    async function callOpenClawApi(userText) {
+        if (!userText) {
+            showAnswer('❌ 没有可发送的文本，请先通过图片OCR、语音或手动输入内容。', true);
+            return;
+        }
+        let apiUrl = openclawUrlInput.value.trim();
+        const apiKey = openclawApiKeyInput.value.trim();
+        if (!apiUrl) {
+            showAnswer('⚠️ 未配置 OpenClaw API 端点，请在左侧「API配置」中填写有效地址，或点击「重置演示Mock」使用模拟演示。', true);
+            return;
+        }
+        
+        showLoadingAnswer();
+        
+        // 构造请求体 (符合主流 OpenAI / 通用格式，同时也适配很多对话模型)
+        // 若用户实际 OpenClaw 接口不同，可手动微调此处（提供说明）
+        const requestBody = {
+            text: userText,
+            message: userText,   // 兼容双字段
+            prompt: userText
+        };
+        // 默认简单模式: 只发送 text 字段，多数自定义模型可接收
+        const finalPayload = { text: userText };
+        
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+        if (apiKey) {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+        
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(finalPayload),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            const data = await response.json();
+            // 智能提取答案: 适配常见返回字段 response, reply, answer, content, text
+            let answerText = null;
+            if (data.response) answerText = data.response;
+            else if (data.reply) answerText = data.reply;
+            else if (data.answer) answerText = data.answer;
+            else if (data.content) answerText = data.content;
+            else if (data.text) answerText = data.text;
+            else if (data.message) answerText = data.message;
+            else answerText = JSON.stringify(data);
+            
+            if (answerText) {
+                showAnswer(answerText);
+            } else {
+                showAnswer('⚠️ OpenClaw 返回数据格式未知，原始响应: ' + JSON.stringify(data).slice(0, 300), true);
+            }
+        } catch (error) {
+            console.error('OpenClaw 调用失败:', error);
+            let errorMsg = `❌ 调用 OpenClaw 失败: ${error.message}`;
+            if (error.name === 'AbortError') errorMsg = '⏱️ 请求超时，请检查网络或API地址';
+            showAnswer(errorMsg, true);
+        }
+    }
+    
+    // 模拟演示模式 (当用户使用mock端点或者点击重置时，提供一个假响应，展示调用流程)
+    // 实际上我们的默认端点是一个mock占位，但为了更友好的模拟，拦截特定mock域名做本地模拟。
+    // 增强: 如果url包含 'mock-openclaw.demo' 就模拟回复
+    function isMockEndpoint(url) {
+        return url.includes('mock-openclaw.demo') || url === 'https://mock-openclaw.demo/api/chat';
+    }
+    
+    // 重写fetch拦截模拟演示（保留真实调用能力，只是对mock域名模拟）
+    const originalFetch = window.fetch;
+    window.fetch = function(...args) {
+        const url = args[0];
+        if (typeof url === 'string' && isMockEndpoint(url)) {
+            // 模拟 OpenClaw 返回
+            const options = args[1];
+            let bodyText = '';
+            if (options && options.body) {
+                try {
+                    const parsed = JSON.parse(options.body);
+                    bodyText = parsed.text || parsed.message || '用户消息';
+                } catch(e) { bodyText = '用户输入'; }
+            }
+            const mockReply = `🤖 [OpenClaw 模拟响应] 收到您的消息：「${bodyText}」\n\n✨ 这是演示模式返回的内容。请替换API端点为真实OpenClaw服务，即可获得模型智能答案。`;
+            return Promise.resolve(new Response(JSON.stringify({ response: mockReply }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+            }));
+        }
+        return originalFetch.apply(this, args);
+    };
+    
+    // 发送按钮逻辑
+    sendBtn.addEventListener('click', async () => {
+        const text = getCurrentMessage();
+        if (!text) {
+            showAnswer('⚠️ 文本框为空，请通过图片/语音输入或手动填写文字后再发送。', true);
+            return;
+        }
+        await callOpenClawApi(text);
+    });
+    
+    // 重置mock演示端点（方便测试流程）
+    resetMockBtn.addEventListener('click', () => {
+        openclawUrlInput.value = 'https://mock-openclaw.demo/api/chat';
+        openclawApiKeyInput.value = '';
+        showAnswer('✅ 已重置为模拟演示端点 (Mock)。您可看到OpenClaw的模拟回答，演示完整调用流程。', false);
+        setTimeout(() => {
+            if(answerDisplayDiv.innerHTML.includes('模拟演示端点')) return;
+        }, 2000);
+    });
+    
+    // 初始化时预先加载OCR worker (后台静默)
+    window.addEventListener('load', () => {
+        initTesseract().catch(e => console.warn);
+        // 预置示例提示
+        userTextInput.placeholder = "OCR或语音识别结果自动填充至此，也可直接输入文字发送给OpenClaw...";
+        showAnswer('✨ 前端壳已启动。\n\n使用方式：\n1. 上传图片 → 自动OCR → 文字填入输入框\n2. 点击「开始语音识别」→ 说话 → 转文字\n3. 编辑或直接点击发送 → OpenClaw 模型处理 → 右侧展示答案', false);
+    });
+    
+    // 调整文本域高度
+    userTextInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(120, this.scrollHeight) + 'px';
+    });
+</script>
+</body>
+</html>
